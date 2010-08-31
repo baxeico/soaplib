@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 #
 # soaplib - Copyright (C) Soaplib contributors.
@@ -374,6 +375,7 @@ class Application(object):
                 soap_req_header, soap_req_payload = self.__decode_soap_request(
                                                                 req_env, body)
                 method_name = self.__get_method_name(req_env, soap_req_payload)
+                
                 if method_name is None:
                     # initiate the response
                     start_response('200 OK', http_resp_headers.items())

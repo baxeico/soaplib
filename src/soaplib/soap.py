@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 #
 # soaplib - Copyright (C) Soaplib contributors.

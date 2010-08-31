@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 #
 # soaplib - Copyright (C) Soaplib contributors.
@@ -20,7 +21,6 @@
 import sys
 import urllib
 import soaplib
-import urllib
 
 from lxml import etree
 

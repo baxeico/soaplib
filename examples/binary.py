@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 #
 # soaplib - Copyright (C) 2009 Aaron Bickell, Jamie Kirkpatrick
 #
@@ -17,8 +18,9 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
 #
 
-from soaplib.wsgi_soap import SimpleWSGIApp
+from soaplib.wsgi import Application
 from soaplib.service import rpc
+from soaplib.service import DefinitionBase
 from soaplib.serializers.primitive import String
 from soaplib.serializers.binary import Attachment
 
@@ -27,7 +29,7 @@ from tempfile import mkstemp
 import os
 
 
-class DocumentArchiver(SimpleWSGIApp):
+class DocumentArchiver(DefinitionBase):
     @rpc(Attachment, _returns=String)
     def archive_document(self, document):
         '''
@@ -59,16 +61,10 @@ class DocumentArchiver(SimpleWSGIApp):
         #   document = Attachment(data=data_from_file)
         return document
 
-
-def make_client():
-    from soaplib.client import make_service_client
-    client = make_service_client('http://localhost:7889/', DocumentArchiver())
-    return client
-
 if __name__=='__main__':
     try:
         from wsgiref.simple_server import make_server
-        server = make_server('localhost', 7889, DocumentArchiver())
+        server = make_server('localhost', 7889, Application([DocumentArchiver], 'tns'))
         server.serve_forever()
     except ImportError:
         print "Error: example server code requires Python >= 2.5"
