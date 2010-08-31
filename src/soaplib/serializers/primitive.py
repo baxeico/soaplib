@@ -355,6 +355,9 @@ class Array(SimpleType):
 
             schema_entries.add_element(cls, top_level_element)
 
+class AnyUri(String):
+    __type_name__ = 'anyURI'
+
 # a class that is really a namespace
 class Mandatory(object):
     String = String(min_len=1, min_occurs=1, nillable=False)
