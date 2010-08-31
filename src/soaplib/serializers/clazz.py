@@ -27,87 +27,7 @@ from soaplib.serializers import nillable_value
 
 from soaplib.serializers.primitive import Array
 
-class TypeInfo(object):
-    """
-    Sort of an ordered dictionary implementation.
-    """
-
-    class Empty(object):
-        pass
-
-    def __init__(self, data=[]):
-        if isinstance(data, self.__class__):
-            self.__list = list(data.__list)
-            self.__dict = dict(data.__dict)
-
-        else:
-            self.__list = []
-            self.__dict = {}
-
-            self.update(data)
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self.__dict[self.__list[key]]
-        else:
-            return self.__dict[key]
-
-    def __setitem__(self, key, val):
-        if isinstance(key, int):
-            self.__dict[self.__list[key]] = val
-
-        else:
-            if not (key in self.__dict):
-                self.__list.append(key)
-            self.__dict[key] = val
-
-        assert len(self.__list) == len(self.__dict), (repr(self.__list),
-                                                              repr(self.__dict))
-
-    def __contains__(self, what):
-        return (what in self.__dict)
-
-    def __repr__(self):
-        return "<TypeInfo: %s>" % repr(list(self.items()))
-
-    def __str__(self):
-        return repr(self)
-
-    def __len__(self):
-        assert len(self.__list) == len(self.__dict)
-
-        return len(self.__list)
-
-    def __iter__(self):
-        return iter(self.__list)
-
-    def items(self):
-        for k in self.__list:
-            yield k, self.__dict[k]
-
-    def keys(self):
-        return self.__list
-
-    def update(self, data):
-        if isinstance(data, dict):
-            data = data.items()
-
-        for k,v in data:
-            self[k] = v
-
-    def get(self, key, default=Empty):
-        if key in self.__dict:
-            return self[key]
-
-        else:
-            if default is TypeInfo.Empty:
-                raise KeyError(key)
-            else:
-                return default
-
-    def append(self, t):
-        k, v = t
-        self[k] = v
+from soaplib.util.odict import odict as TypeInfo
 
 class ClassSerializerMeta(type):
     '''
@@ -127,7 +47,8 @@ class ClassSerializerMeta(type):
 
         # get base class (if exists) and enforce single inheritance
         extends = cls_dict.get("__extends__", None)
-        if extends != None:
+
+        if extends is None:
             for b in cls_bases:
                 base_types = getattr(b, "_type_info", None)
 
@@ -136,7 +57,7 @@ class ClassSerializerMeta(type):
                                 "WSDL 1.1 does not support multiple inheritance"
 
                     try:
-                        if len(base_types) > 0 and issubclass(extends, Base):
+                        if len(base_types) > 0 and issubclass(b, Base):
                             cls_dict["__extends__"] = extends = b
                     except:
                         print extends
@@ -197,11 +118,12 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
     @classmethod
     @nillable_value
-    def to_xml(cls, value, tns, name=None):
+    def to_xml(cls, value, tns, name=None, element=None):
         if name is None:
             name = cls.get_type_name()
 
-        element = etree.Element("{%s}%s" % (tns, name))
+        if element is None:
+            element = etree.Element("{%s}%s" % (cls.get_namespace(), name))
 
         if isinstance(value, list) or isinstance(value, tuple):
             assert len(value) <= len(cls._type_info)
@@ -225,8 +147,13 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
         for k, v in cls._type_info.items():
             subvalue = getattr(value, k, None)
-            subelement = v.to_xml(subvalue, tns, k)
+            subelement = v.to_xml(subvalue, cls.get_namespace(), k)
             element.append(subelement)
+
+        clz = getattr(cls,'__extends__', None)
+        while not (clz is None):
+            clz.to_xml(value, tns, name, element)
+            clz = getattr(clz,'__extends__', None)
 
         return element
 
@@ -237,9 +164,16 @@ class ClassSerializerBase(NonExtendingClass, Base):
         children = element.getchildren()
 
         for c in children:
+            if isinstance(c, etree._Comment):
+                continue
             key = c.tag.split('}')[-1]
 
             member = cls._type_info.get(key, None)
+            clz = getattr(cls,'__extends__', None)
+            while not (clz is None) and (member is None):
+                member = clz._type_info.get(key, None)
+                clz = getattr(clz,'__extends__', None)
+
             if member is None:
                 raise Exception('the %s object does not have a "%s" member' %
                                                              (cls.__name__,key))
@@ -268,12 +202,14 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 v.__namespace__ = cls.get_namespace()
                 v.__type_name__ = "%s_%sType" % (cls.get_type_name(), k)
 
-            v.resolve_namespace(cls.get_namespace())
+            v.resolve_namespace(default_ns)
 
     @classmethod
     def add_to_schema(cls, schema_entries):
         if not schema_entries.has_class(cls):
-            # complex node
+            if not (getattr(cls, '__extends__', None) is None):
+                cls.__extends__.add_to_schema(schema_entries)
+
             complex_type = etree.Element("{%s}complexType" % soaplib.ns_xsd)
             complex_type.set('name',cls.get_type_name())
 
@@ -282,7 +218,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 cls.__extends__.add_to_schema(schema_entries)
 
                 complex_content = etree.SubElement(complex_type,
-                                        "{%s}complexContent" % soaplib.ns_xsd )
+                                          "{%s}complexContent" % soaplib.ns_xsd)
                 extension = etree.SubElement(complex_content, "{%s}extension"
                                                                % soaplib.ns_xsd)
                 extension.set('base', cls.__extends__.get_type_name_ns())

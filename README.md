@@ -1,4 +1,3 @@
-
 Overview
 ========
 
@@ -24,12 +23,7 @@ Runtime Requirements
 * Python 2.4 or greater
 * [lxml](http://codespeak.net/lxml/) (available through easy_install)
 * a WSGI-compliant web server (CherryPy, WSGIUtils, Flup, etc.)
-* [pytz] (http://pytz.sourceforge.net/) (available through easy_install)
-
-Development Requirements
-------------------------
-* Most examples and tests require Python 2.5 or greater
-* Twisted is required for `interop.server.static`
+* [pytz](http://pytz.sourceforge.net/) (available through easy_install)
 
 Soaplib services can be deployed as WSGI applications, in any WSGI-compliant
 web server. See the examples directory in the source distribution for deployment
@@ -38,6 +32,10 @@ servers:
 
 * CherryPy 2.2
 * Flup
-* Twisted.web2
+* twisted.web (8.2, 9.0)
 * WSGIUtils 0.9
 
+Development Requirements
+------------------------
+* Most examples and tests require Python 2.5 or greater
+* Twisted is required for `interop.server.static`

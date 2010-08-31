@@ -30,6 +30,8 @@ from soaplib.serializers import SimpleType
 from soaplib.serializers import nillable_element
 from soaplib.serializers import nillable_value
 from soaplib.serializers import string_to_xml
+from soaplib.util.etreeconv import etree_to_dict
+from soaplib.util.etreeconv import dict_to_etree
 
 string_encoding = 'utf-8'
 
@@ -42,8 +44,8 @@ _local_re = re.compile(_datetime_pattern)
 _utc_re = re.compile(_datetime_pattern + 'Z')
 _offset_re = re.compile(_datetime_pattern + _offset_pattern)
 
-_ns_xs = soaplib.nsmap['xs']
-_ns_xsi = soaplib.nsmap['xsi']
+_ns_xs = soaplib.ns_xsd
+_ns_xsi = soaplib.ns_xsi
 
 class Any(SimpleType):
     __type_name__ = 'anyType'
@@ -54,7 +56,7 @@ class Any(SimpleType):
         if isinstance(value, str) or isinstance(value, unicode):
             value = etree.fromstring(value)
 
-        e = etree.Element(name)
+        e = etree.Element('{%s}%s' % (tns,name))
         e.append(value)
 
         return e
@@ -72,61 +74,10 @@ class Any(SimpleType):
 
 class AnyAsDict(Any):
     @classmethod
-    def _dict_to_etree(cls, d):
-        """the dict values are either dicts or iterables"""
-
-        retval = []
-        for k, v in d.items():
-            if v is None:
-                retval.append(etree.Element(k))
-            else:
-                if isinstance(v, dict):
-                    retval.append(etree.Element(cls._dict_to_etree(v)))
-
-                else:
-                    for e in v:
-                        retval.append(etree.Element(str(e)))
-
-        return retval
-
-    @classmethod
-    def _etree_to_dict(cls, elt, with_root=True):
-        r = {}
-
-        if with_root:
-            retval = {elt.tag: r}
-        else:
-            retval = r
-
-        for e in elt:
-            if (e.text is None) or e.text.isspace():
-                r[e.tag] = cls._etree_to_dict(e, False)
-
-            else:
-                if e.tag in r:
-                    if not (e.text is None):
-                        r[e.tag].append(e.text)
-                else:
-                    if e.text is None:
-                        r[e.tag] = []
-                    else:
-                        r[e.tag] = [e.text]
-
-        if with_root:
-            if len(r) == 0:
-                retval[elt.tag] = []
-            return retval
-        else:
-            if len(r) > 0:
-                return retval
-            else:
-                return []
-
-    @classmethod
     @nillable_value
     def to_xml(cls, value, tns, name='retval'):
-        e = etree.Element(name)
-        e.extend(cls._dict_to_etree(value))
+        e = etree.Element('{%s}%s' % (tns,name))
+        dict_to_etree(e, value)
 
         return e
 
@@ -135,7 +86,9 @@ class AnyAsDict(Any):
     def from_xml(cls, element):
         children = element.getchildren()
         if children:
-            return cls._etree_to_dict(element.getchildren()[0])
+            ret = etree_to_dict(element)
+            return ret
+
         return None
 
 class String(SimpleType):
@@ -334,7 +287,7 @@ class Array(SimpleType):
         cls.serializer.resolve_namespace(default_ns)
 
         if cls.__namespace__ is None:
-            if cls.serializer.get_namespace() != soaplib.nsmap['xs']:
+            if cls.serializer.get_namespace() != soaplib.ns_xsd:
                 cls.__namespace__ = cls.serializer.get_namespace()
             else:
                 cls.__namespace__ = default_ns
@@ -343,7 +296,7 @@ class Array(SimpleType):
                                             cls.__namespace__ == '__main__'):
             cls.__namespace__ = default_ns
 
-        cls.serializer.resolve_namespace(cls.get_namespace())
+        cls.serializer.resolve_namespace(default_ns)
 
     @classmethod
     @nillable_value

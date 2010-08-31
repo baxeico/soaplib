@@ -24,6 +24,7 @@ from lxml import etree
 from soaplib.soap import Message
 from soaplib.soap import MethodDescriptor
 from soaplib.serializers.clazz import TypeInfo
+from soaplib.util.odict import odict
 
 import logging
 logger = logging.getLogger(__name__)
@@ -107,6 +108,8 @@ def rpc(*params, **kparams):
                 _public_name = kparams.get('_public_name', f.func_name)
                 _is_async = kparams.get('_is_async', False)
                 _mtom = kparams.get('_mtom', False)
+                _in_header = kparams.get('_in_header', None)
+                _out_header = kparams.get('_out_header', None)
 
                 # the decorator function does not have a reference to the
                 # class and needs to be passed in
@@ -115,10 +118,15 @@ def rpc(*params, **kparams):
                 in_message = get_input_message(ns)
                 out_message = get_output_message(ns)
 
+                if not (_in_header is None):
+                    _in_header.resolve_namespace(ns)
+                if not (_out_header is None):
+                    _out_header.resolve_namespace(ns)
+
                 doc = getattr(f, '__doc__')
                 descriptor = MethodDescriptor(f.func_name, _public_name,
                         in_message, out_message, doc, _is_callback, _is_async,
-                        _mtom)
+                        _mtom, _in_header, _out_header)
 
                 return descriptor
 
@@ -134,12 +142,12 @@ def rpc(*params, **kparams):
 
 class _SchemaInfo(object):
     def __init__(self):
-        self.elements = {}
-        self.types = {}
+        self.elements = odict()
+        self.types = odict()
 
 class _SchemaEntries(object):
     def __init__(self, tns):
-        self.namespaces = {}
+        self.namespaces = odict()
         self.imports = {}
         self.tns = tns
 
@@ -170,24 +178,36 @@ class _SchemaEntries(object):
     # FIXME: this is an ugly hack. we need proper dependency management
     def __check_imports(self, cls, node):
         pref_tns = cls.get_namespace_prefix()
+
+        def is_valid_import(pref):
+            return not (
+                (pref in soaplib.const_nsmap) or (pref == pref_tns)
+            )
+
         if not (pref_tns in self.imports):
             self.imports[pref_tns] = set()
 
         for c in node:
             if c.tag == "{%s}complexContent" % soaplib.ns_xsd:
                 seq = c.getchildren()[0].getchildren()[0] # FIXME: ugly, isn't it?
+
+                extension = c.getchildren()[0]
+                if extension.tag == '{%s}extension' % soaplib.ns_xsd:
+                    pref = extension.attrib['base'].split(':')[0]
+                    if is_valid_import(pref):
+                        self.imports[pref_tns].add(soaplib.nsmap[pref])
             else:
                 seq = c
 
             if seq.tag == '{%s}sequence' % soaplib.ns_xsd:
                 for e in seq:
                     pref = e.attrib['type'].split(':')[0]
-                    if not ((pref in soaplib.const_nsmap) or (pref == pref_tns)):
+                    if is_valid_import(pref):
                         self.imports[pref_tns].add(soaplib.nsmap[pref])
 
             elif seq.tag == '{%s}restriction' % soaplib.ns_xsd:
                 pref = seq.attrib['base'].split(':')[0]
-                if not ((pref in soaplib.const_nsmap) or (pref == pref_tns)):
+                if is_valid_import(pref):
                     self.imports[pref_tns].add(soaplib.nsmap[pref])
 
             else:
@@ -222,9 +242,12 @@ class DefinitionBase(object):
     '''
 
     __tns__ = None
+    __in_header__ = None
+    __out_header__ = None
 
     def __init__(self, environ=None):
-        self.soap_req_header = None
+        self.soap_in_header = None
+        self.soap_out_header = None
 
         cls = self.__class__
         if not (cls in _public_methods_cache):
@@ -243,13 +266,15 @@ class DefinitionBase(object):
         '''
         pass
 
-    def on_method_return(self, environ, py_results, soap_results, soap_headers):
+    def on_method_return(self, environ, py_results, soap_results,
+                                                             http_resp_headers):
         '''
         Called AFTER the service implementing the functionality is called
         @param the wsgi environment
         @param the python results from the method
         @param the xml serialized results of the method
-        @param soap headers as a list of lxml.etree._Element objects
+        @param soap response headers as a list of lxml.etree._Element objects
+        @param http response headers as a dict of strings
         '''
         pass
 
@@ -343,10 +368,8 @@ class DefinitionBase(object):
 
     def add_port_type(self, root, service_name, types, url, port_type):
         ns_wsdl = soaplib.ns_wsdl
-        ns_tns = self.get_tns()
-        pref_tns = soaplib.get_namespace_prefix(ns_tns)
 
-        # FIXME: I don't think it is working.
+        # FIXME: I don't think this call is working.
         cb_port_type = self.__add_callbacks(root, types, service_name, url)
 
         for method in self.public_methods:
@@ -367,14 +390,12 @@ class DefinitionBase(object):
 
             op_input = etree.SubElement(operation, '{%s}input' % ns_wsdl)
             op_input.set('name', method.in_message.get_type_name())
-            op_input.set('message', '%s:%s' % (pref_tns,
-                                             method.in_message.get_type_name()))
+            op_input.set('message', method.in_message.get_type_name_ns())
 
             if (not method.is_callback) and (not method.is_async):
                 op_output = etree.SubElement(operation, '{%s}output' %  ns_wsdl)
                 op_output.set('name', method.out_message.get_type_name())
-                op_output.set('message', '%s:%s' % (pref_tns,
-                                            method.out_message.get_type_name()))
+                op_output.set('message', method.out_message.get_type_name_ns())
 
     # FIXME: I don't think this is working.
     def __add_callbacks(self, root, types, service_name, url):
@@ -437,7 +458,7 @@ class DefinitionBase(object):
 
         return cb_port_type
 
-    def add_schema(self, schema_entries=None):
+    def add_schema(self, schema_entries):
         '''
         A private method for adding the appropriate entries
         to the schema for the types in the specified methods.
@@ -451,37 +472,53 @@ class DefinitionBase(object):
         if schema_entries is None:
             schema_entries = _SchemaEntries(self.get_tns())
 
+        if self.__in_header__ != None:
+            self.__in_header__.resolve_namespace(self.get_tns())
+            self.__in_header__.add_to_schema(schema_entries)
+
+        if self.__out_header__ != None:
+            self.__out_header__.resolve_namespace(self.get_tns())
+            self.__out_header__.add_to_schema(schema_entries)
+
         for method in self.public_methods:
             method.in_message.add_to_schema(schema_entries)
             method.out_message.add_to_schema(schema_entries)
 
+            if method.in_header is None:
+                method.in_header = self.__in_header__
+            else:
+                method.in_header.add_to_schema(schema_entries)
+
+            if method.out_header is None:
+                method.out_header = self.__out_header__
+            else:
+                method.out_header.add_to_schema(schema_entries)
+
         return schema_entries
 
-    def add_messages_for_methods(self, root, service_name, types, url):
+    def __add_message_for_object(self, root, messages, obj):
+        if obj != None and not (obj.get_type_name() in messages):
+            messages.add(obj.get_type_name())
+
+            message = etree.SubElement(root, '{%s}message' % soaplib.ns_wsdl)
+            message.set('name', obj.get_type_name())
+
+            part = etree.SubElement(message, '{%s}part' % soaplib.ns_wsdl)
+            part.set('name', obj.get_type_name())
+            part.set('element', obj.get_type_name_ns())
+
+    def add_messages_for_methods(self, root, messages):
         '''
         A private method for adding message elements to the wsdl
         @param the the root element of the wsdl
         '''
 
-        _pref_tns = soaplib.get_namespace_prefix(self.get_tns())
-
-        #make messages
         for method in self.public_methods:
-            # making in part
-            in_message = etree.SubElement(root, '{%s}message' % soaplib.ns_wsdl)
-            in_message.set('name', method.in_message.get_type_name())
+            self.__add_message_for_object(root, messages, method.in_message)
+            self.__add_message_for_object(root, messages, method.out_message)
+            self.__add_message_for_object(root, messages, method.in_header)
+            self.__add_message_for_object(root, messages, method.out_header)
 
-            in_part = etree.SubElement(in_message, '{%s}part' % soaplib.ns_wsdl)
-            in_part.set('name', method.in_message.get_type_name())
-            in_part.set('element', method.in_message.get_type_name())
-
-            out_message = etree.SubElement(root, '{%s}message' % soaplib.ns_wsdl)
-            out_message.set('name', method.out_message.get_type_name())
-
-            out_part = etree.SubElement(out_message, '{%s}part' % soaplib.ns_wsdl)
-            out_part.set('name', method.out_message.get_type_name())
-            out_part.set('element', '%s:%s' % (_pref_tns,
-                                            method.out_message.get_type_name()))
 
     def add_bindings_for_methods(self, root, service_name, types, url, binding, cb_binding=None):
         '''
@@ -494,10 +531,6 @@ class DefinitionBase(object):
         ns_wsdl = soaplib.ns_wsdl
         ns_soap = soaplib.ns_soap
         pref_tns = soaplib.get_namespace_prefix(self.get_tns())
-
-        soap_binding = etree.SubElement(binding, '{%s}binding' % ns_soap)
-        soap_binding.set('style', 'document')
-        soap_binding.set('transport', 'http://schemas.xmlsoap.org/soap/http')
 
         if self._has_callbacks():
             if cb_binding is None:
@@ -517,18 +550,42 @@ class DefinitionBase(object):
             soap_operation.set('soapAction', method.public_name)
             soap_operation.set('style', 'document')
 
+            # get input
             input = etree.SubElement(operation, '{%s}input' % ns_wsdl)
             input.set('name', method.in_message.get_type_name())
 
             soap_body = etree.SubElement(input, '{%s}body' % ns_soap)
             soap_body.set('use', 'literal')
 
-            if (not method.is_async) and (not method.is_callback):
+            # get input soap header
+            in_header = method.in_header
+            if in_header is None:
+                in_header = self.__in_header__
+
+            if not (in_header is None):
+                soap_header = etree.SubElement(input, '{%s}header' % ns_soap)
+                soap_header.set('use', 'literal')
+                soap_header.set('message', in_header.get_type_name_ns())
+                soap_header.set('part', in_header.get_type_name())
+
+            if not (method.is_async or method.is_callback):
                 output = etree.SubElement(operation, '{%s}output' % ns_wsdl)
                 output.set('name', method.out_message.get_type_name())
 
                 soap_body = etree.SubElement(output, '{%s}body' % ns_soap)
                 soap_body.set('use', 'literal')
+
+                # get input soap header
+                out_header = method.in_header
+                if out_header is None:
+                    out_header = self.__in_header__
+
+                if not (out_header is None):
+                    soap_header = etree.SubElement(output, '{%s}header' % ns_soap)
+                    soap_header.set('use', 'literal')
+                    soap_header.set('message', out_header.get_type_name_ns())
+                    soap_header.set('part', out_header.get_type_name())
+
 
             if method.is_callback:
                 relates_to = etree.SubElement(input, '{%s}header' % ns_soap)

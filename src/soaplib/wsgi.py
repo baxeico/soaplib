@@ -39,11 +39,15 @@ from soaplib.soap import from_soap
 from soaplib.soap import make_soap_envelope
 from soaplib.util import reconstruct_url
 
+HTTP_500 = '500 Internal server error'
+HTTP_200 = '200 OK'
+HTTP_405 = '405 Method Not Allowed'
+
 class ValidationError(Fault):
     pass
 
 class Application(object):
-    def __init__(self, services, tns):
+    def __init__(self, services, tns, _with_partnerlink=False):
         '''
         @param A ServiceBase subclass that defines the exposed services.
         '''
@@ -55,6 +59,7 @@ class Application(object):
         self.__public_methods = {}
         self.schema = None
         self.tns = tns
+        self._with_plink = _with_partnerlink
 
         self.build_schema()
 
@@ -135,6 +140,7 @@ class Application(object):
                     else:
                         logger.debug('adding method %r' % method_name)
                         self.call_routes[method_name] = s
+                        self.call_routes[method.name] = s
 
         # populate types
         schema_entries = None
@@ -179,18 +185,18 @@ class Application(object):
 
     def __build_wsdl(self, url):
         ns_wsdl = soaplib.ns_wsdl
-        ns_tns = self.get_tns()
+        ns_soap = soaplib.ns_soap
         ns_plink = soaplib.ns_plink
-        pref_tns = soaplib.get_namespace_prefix(ns_tns)
+
+        ns_tns = self.get_tns()
+        pref_tns = soaplib.get_namespace_prefix(ns_tns) #'tns'
+        #soaplib.set_namespace_prefix(ns_tns, pref_tns)
 
         # FIXME: doesn't look so robust
         url = url.replace('.wsdl', '')
 
         # TODO: we may want to customize service_name.
         service_name = self.__class__.__name__.split('.')[-1]
-
-        # this needs to run before creating definitions tag in order to get
-        # soaplib.nsmap populated.
 
         # create wsdl root node
         root = etree.Element("{%s}definitions" % ns_wsdl, nsmap=soaplib.nsmap)
@@ -201,16 +207,18 @@ class Application(object):
         types = etree.SubElement(root, "{%s}types" % ns_wsdl)
 
         self.build_schema(types)
+        messages = set()
 
         for s in self.services:
             s=self.get_service(s,None)
 
-            s.add_messages_for_methods(root, service_name, types, url)
+            s.add_messages_for_methods(root, messages)
 
-        # create plink node
-        plink = etree.SubElement(root, '{%s}partnerLinkType' % ns_plink)
-        plink.set('name', service_name)
-        self.add_partner_link(root, service_name, types, url, plink)
+        if self._with_plink:
+            # create plink node
+            plink = etree.SubElement(root, '{%s}partnerLinkType' % ns_plink)
+            plink.set('name', service_name)
+            self.add_partner_link(root, service_name, types, url, plink)
 
         # create service node
         service = etree.SubElement(root, '{%s}service' % ns_wsdl)
@@ -225,6 +233,10 @@ class Application(object):
         binding = etree.SubElement(root, '{%s}binding' % ns_wsdl)
         binding.set('name', service_name)
         binding.set('type', '%s:%s'% (pref_tns, service_name))
+
+        soap_binding = etree.SubElement(binding, '{%s}binding' % ns_soap)
+        soap_binding.set('style', 'document')
+        soap_binding.set('transport', 'http://schemas.xmlsoap.org/soap/http')
 
         cb_binding = None
 
@@ -254,10 +266,12 @@ class Application(object):
     def __handle_wsdl_request(self, req_env, start_response, url):
         http_resp_headers = {'Content-Type': 'text/xml'}
 
-        start_response('200 OK', http_resp_headers.items())
         try:
             self.get_wsdl(url)
             self.on_wsdl(req_env, self.__wsdl) # implementation hook
+
+            http_resp_headers['Content-Length'] = str(len(self.__wsdl))
+            start_response(HTTP_200, http_resp_headers.items())
 
             return [self.__wsdl]
 
@@ -269,14 +283,13 @@ class Application(object):
             fault_xml = Fault.to_xml(Fault(str(e)), tns)
             fault_str = etree.tostring(fault_xml,
                    xml_declaration=True, encoding=string_encoding)
-            logger.debug(fault_str)
+            if logger.level == logging.DEBUG:
+                logger.debug(etree.tostring(etree.fromstring(fault_str),pretty_print=True))
 
             self.on_wsdl_exception(req_env, e, fault_xml)
 
-            # initiate the response
             http_resp_headers['Content-length'] = str(len(fault_str))
-            start_response('500 Internal Server Error',
-                http_resp_headers.items())
+            start_response(HTTP_500, http_resp_headers.items())
 
             return [fault_str]
 
@@ -303,7 +316,6 @@ class Application(object):
 
     def __get_method_name(self, http_req_env, soap_req_payload):
         retval = None
-
 
         if soap_req_payload is not None:
             retval = soap_req_payload.tag
@@ -355,8 +367,10 @@ class Application(object):
         return retval
 
     def __handle_soap_request(self, req_env, start_response, url):
-        http_resp_headers = {'Content-Type': 'text/xml'}
-        soap_resp_headers = []
+        http_resp_headers = {
+            'Content-Type': 'text/xml',
+            'Content-Length': '0',
+        }
         method_name = None
 
         try:
@@ -364,7 +378,8 @@ class Application(object):
             self.on_call(req_env)
 
             if req_env['REQUEST_METHOD'].lower() != 'post':
-                start_response('405 Method Not Allowed', [('Allow', 'POST')])
+                http_resp_headers['Allow'] = 'POST'
+                start_response(HTTP_405, http_resp_headers.items())
                 return ['']
 
             input = req_env.get('wsgi.input')
@@ -372,21 +387,21 @@ class Application(object):
             body = input.read(int(length))
 
             try:
+                service = None
                 soap_req_header, soap_req_payload = self.__decode_soap_request(
                                                                 req_env, body)
+                self.validate_request(soap_req_payload)
+
                 method_name = self.__get_method_name(req_env, soap_req_payload)
                 
                 if method_name is None:
-                    # initiate the response
-                    start_response('200 OK', http_resp_headers.items())
-
-                    return [""]
+                    resp = "Could not get method name!"
+                    http_resp_headers['Content-Length'] = str(len(resp))
+                    start_response(HTTP_500, http_resp_headers.items())
+                    return [resp]
 
                 service_class = self.get_service_class(method_name)
                 service = self.get_service(service_class, req_env)
-                service.soap_req_header = soap_req_header
-
-                self.validate_request(soap_req_payload)
 
             finally:
                 # for performance reasons, we don't want the following to run
@@ -403,11 +418,15 @@ class Application(object):
             descriptor = service.get_method(method_name)
             func = getattr(service, descriptor.name)
 
+            # decode header object
+            if soap_req_header is not None and len(soap_req_header) > 0:
+                service.soap_in_header = descriptor.in_header.from_xml(soap_req_header)
+
             # decode method arguments
             if soap_req_payload is not None and len(soap_req_payload) > 0:
                 params = descriptor.in_message.from_xml(soap_req_payload)
             else:
-                params = ()
+                params = [None] * len(descriptor.in_message._type_info)
 
             # implementation hook
             service.on_method_call(req_env, method_name, params, body)
@@ -420,24 +439,31 @@ class Application(object):
 
             # assign raw result to its wrapper, result_message
             out_type = descriptor.out_message._type_info
+
             if len(out_type) > 0:
+                assert len(out_type) == 1
+                
                 attr_name = descriptor.out_message._type_info.keys()[0]
                 setattr(result_message, attr_name, result_raw)
 
             # transform the results into an element
             # only expect a single element
-            results_soap = None
+            soap_resp_body = None
             if not (descriptor.is_async or descriptor.is_callback):
-                results_soap = descriptor.out_message.to_xml(result_message,
+                soap_resp_body = descriptor.out_message.to_xml(result_message,
                                                               self.get_tns())
+            soap_resp_header = None
+            if not (descriptor.out_header is None or service.soap_out_header is None):
+                soap_resp_header = descriptor.out_header.to_xml(
+                                        service.soap_out_header, self.get_tns(),
+                                        descriptor.out_header.get_type_name())
 
             # implementation hook
-            service.on_method_return(req_env, result_raw, results_soap,
-                                                            soap_resp_headers)
+            service.on_method_return(req_env, result_raw, soap_resp_body,
+                                                            http_resp_headers)
 
             # construct the soap response, and serialize it
-            envelope = make_soap_envelope(results_soap, tns=self.get_tns(),
-                                          header_elements=soap_resp_headers)
+            envelope = make_soap_envelope(soap_resp_header, soap_resp_body)
             results_str = etree.tostring(envelope, xml_declaration=True,
                                                        encoding=string_encoding)
 
@@ -445,10 +471,12 @@ class Application(object):
                 http_resp_headers, results_str = apply_mtom(http_resp_headers,
                     results_str,descriptor.out_message._type_info,[result_raw])
 
+            # implementation hook
             self.on_return(req_env, http_resp_headers, results_str)
 
             # initiate the response
-            start_response('200 OK', http_resp_headers.items())
+            http_resp_headers['Content-Length'] = str(len(results_str))
+            start_response(HTTP_200, http_resp_headers.items())
 
             if logger.level == logging.DEBUG:
                 logger.debug('\033[91m'+ "Response" + '\033[0m')
@@ -458,21 +486,31 @@ class Application(object):
             # return the serialized results
             return [results_str]
 
+        # The user issued a Fault, so handle it just like an exception!
         except Fault, e:
+            stacktrace=traceback.format_exc()
+            logger.error(stacktrace)
+            
             # FIXME: There's no way to alter soap response headers for the user.
 
-            # The user issued a Fault, so handle it just like an exception!
-            fault_xml = make_soap_envelope(Fault.to_xml(e, self.get_tns()),
-                        tns=self.get_tns(), header_elements=soap_resp_headers)
+            soap_resp_header = None
+            soap_resp_body = Fault.to_xml(e, self.get_tns())
 
+            fault_xml = make_soap_envelope(soap_resp_header, soap_resp_body)
             fault_str = etree.tostring(fault_xml, xml_declaration=True,
                                                     encoding=string_encoding)
-            logger.debug(fault_str)
+            if logger.level == logging.DEBUG:
+                logger.debug(etree.tostring(etree.fromstring(fault_str),
+                                                            pretty_print=True))
 
-            service.on_method_exception(req_env, e, fault_xml, fault_str)
+            # implementation hook
+            if not (service is None):
+                service.on_method_exception(req_env, e, fault_xml, fault_str)
+            self.on_exception(req_env,e,fault_str)
 
             # initiate the response
-            start_response('500 Internal Server Error',http_resp_headers.items())
+            http_resp_headers['Content-Length'] = str(len(fault_str))
+            start_response(HTTP_500, http_resp_headers.items())
 
             return [fault_str]
 
@@ -495,18 +533,26 @@ class Application(object):
             detail = ' '
             logger.error(stacktrace)
 
-
             fault = Fault(faultcode, faultstring, detail)
-            fault_xml = make_soap_envelope(Fault.to_xml(fault, self.get_tns()),
-                        tns=self.get_tns(), header_elements=soap_resp_headers)
+
+            soap_resp_header = None
+            soap_resp_body = Fault.to_xml(fault, self.get_tns())
+
+            fault_xml = make_soap_envelope(soap_resp_header, soap_resp_body)
             fault_str = etree.tostring(fault_xml, xml_declaration=True,
                                                        encoding=string_encoding)
-            logger.debug(fault_str)
+            if logger.level == logging.DEBUG:
+                logger.debug(etree.tostring(etree.fromstring(fault_str),
+                                                            pretty_print=True))
 
-            self.on_exception(req_env, e, fault_str)
+            # implementation hook
+            if not (service is None):
+                service.on_method_exception(req_env, e, fault_xml, fault_str)
+            self.on_exception(req_env,e,fault_str)
 
             # initiate the response
-            start_response('500 Internal Server Error',http_resp_headers.items())
+            http_resp_headers['Content-Length'] = str(len(fault_str))
+            start_response(HTTP_500, http_resp_headers.items())
 
             return [fault_str]
 
@@ -542,6 +588,7 @@ class Application(object):
     def on_wsdl(self, environ, wsdl):
         '''
         This is called when a wsdl is requested
+
         @param the wsgi environment
         @param the wsdl string
         '''
@@ -550,6 +597,7 @@ class Application(object):
     def on_wsdl_exception(self, environ, exc, resp):
         '''
         Called when an exception occurs durring wsdl generation
+
         @param the wsgi environment
         @param exc the exception
         @param the fault response string
@@ -559,6 +607,7 @@ class Application(object):
     def on_return(self, environ, http_headers, return_str):
         '''
         Called before the application returns
+
         @param the wsgi environment
         @param http response headers as dict
         @param return string of the soap request
@@ -567,7 +616,9 @@ class Application(object):
 
     def on_exception(self, environ, fault, fault_str):
         '''
-        Called before the application returns
+        Called when the app throws an exception. (might be inside or outside the
+        service call.
+
         @param the wsgi environment
         @param the fault
         @param string of the fault

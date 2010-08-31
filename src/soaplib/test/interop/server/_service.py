@@ -21,6 +21,8 @@ from soaplib.serializers.binary import Attachment
 from soaplib.serializers.clazz import ClassSerializer
 from soaplib.serializers.enum import Enum
 
+from soaplib.serializers.primitive import Any
+from soaplib.serializers.primitive import AnyAsDict
 from soaplib.serializers.primitive import Array
 from soaplib.serializers.primitive import Boolean
 from soaplib.serializers.primitive import DateTime
@@ -32,6 +34,8 @@ from soaplib.serializers.primitive import Double
 from soaplib import service
 from soaplib.service import rpc
 from soaplib.wsgi import ValidatingApplication
+
+from datetime import datetime
 
 import logging
 logger = logging.getLogger(__name__)
@@ -46,6 +50,8 @@ class OtherClass(ClassSerializer):
     b = Boolean
 
 class NestedClass(ClassSerializer):
+    __namespace__ = "punk.tunk"
+
     simple = Array(SimpleClass)
     s = String
     i = Integer
@@ -53,6 +59,8 @@ class NestedClass(ClassSerializer):
     other = OtherClass
 
 class NonNillableClass(ClassSerializer):
+    __namespace__ = "hunk.sunk"
+
     nillable = False
     min_occurs = 1
 
@@ -61,6 +69,8 @@ class NonNillableClass(ClassSerializer):
     s = String(min_len=1, nillable=False)
 
 class ExtensionClass(NestedClass):
+    __namespace__ = "bar"
+
     p = NonNillableClass
     l = DateTime
     q = Integer
@@ -75,7 +85,39 @@ DaysOfWeekEnum = Enum(
     type_name = 'DaysOfWeekEnum'
 )
 
+class InHeader(ClassSerializer):
+    s=String
+    i=Integer
+
+class OutHeader(ClassSerializer):
+    dt=DateTime
+    f=Float
+
+class InteropServiceWithHeader(service.DefinitionBase):
+    __in_header__ = InHeader
+    __out_header__ = OutHeader
+
+    @rpc(_returns=InHeader)
+    def echo_in_header(self):
+        return self.soap_in_header
+
+    @rpc(_returns=OutHeader)
+    def send_out_header(self):
+        self.soap_out_header = OutHeader()
+        self.soap_out_header.dt = datetime(year=2000, month=01, day=01)
+        self.soap_out_header.f = 3.141592653
+
+        return self.soap_out_header
+
 class InteropPrimitive(service.DefinitionBase):
+    @rpc(Any, _returns=Any)
+    def echo_any(self, xml):
+        return xml
+
+    @rpc(AnyAsDict, _returns=AnyAsDict)
+    def echo_any_as_dict(self, xml_as_dict):
+        return xml_as_dict
+
     @rpc(Integer, _returns=Integer)
     def echo_integer(self, i):
         return i
@@ -164,6 +206,14 @@ class InteropClass(service.DefinitionBase):
 
 class InteropMisc(service.DefinitionBase):
     @rpc()
+    def huge_number(_returns=Integer):
+        return 2**int(1e5)
+
+    @rpc()
+    def long_string(_returns=String):
+        return len('0123456789abcdef' * 16384)
+
+    @rpc()
     def test_empty(self):
         pass
 
@@ -188,6 +238,7 @@ services = [
     InteropArray,
     InteropClass,
     InteropMisc,
+    InteropServiceWithHeader,
 ]
 
 application = ValidatingApplication(services, tns=__name__)
