@@ -301,6 +301,7 @@ class Application(object):
         # ('text/xml', {'charset': 'utf-8'})
         content_type = cgi.parse_header(http_env.get("CONTENT_TYPE"))
         charset = content_type[1].get('charset',None)
+
         if charset is None:
             charset = 'ascii'
 
@@ -368,7 +369,7 @@ class Application(object):
 
     def __handle_soap_request(self, req_env, start_response, url):
         http_resp_headers = {
-            'Content-Type': 'text/xml',
+            'Content-Type': 'application/soap+xml',
             'Content-Length': '0',
         }
         method_name = None
