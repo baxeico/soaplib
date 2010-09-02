@@ -358,6 +358,9 @@ class Array(SimpleType):
 class AnyUri(String):
     __type_name__ = 'anyURI'
 
+class Token(String):
+    __type_name__ = 'token'
+
 # a class that is really a namespace
 class Mandatory(object):
     String = String(min_len=1, min_occurs=1, nillable=False)
