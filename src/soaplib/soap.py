@@ -79,11 +79,13 @@ def from_soap(xml_string, http_charset):
         logger.debug('%s -- falling back to str decoding.' % (e))
         root, xmlids = etree.XMLID(xml_string)
 
+    logger.debug("root: " + etree.tostring(root, pretty_print=True))
+
     if xmlids:
         resolve_hrefs(root, xmlids)
 
-    header_envelope = root.xpath('e:Header', namespaces={'e': soaplib.ns_soap_env})
-    body_envelope = root.xpath('e:Body', namespaces={'e': soaplib.ns_soap_env})
+    header_envelope = root.xpath('e:Header', namespaces={'e': soaplib.ns_soap12_env})
+    body_envelope = root.xpath('e:Body', namespaces={'e': soaplib.ns_soap12_env})
 
     body=None
     if len(body_envelope) > 0 and len(body_envelope[0]) > 0:
@@ -132,12 +134,12 @@ def make_soap_envelope(header, body):
     @param any header elements to be included in the soap response
     @returns the envelope element
     '''
-    envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap_env, nsmap=soaplib.nsmap)
+    envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap12_env, nsmap=soaplib.nsmap)
     if not (header is None):
-        soap_header = etree.SubElement(envelope, '{%s}Header' % soaplib.ns_soap_env)
+        soap_header = etree.SubElement(envelope, '{%s}Header' % soaplib.ns_soap12_env)
         soap_header.append(header)
 
-    soap_body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap_env)
+    soap_body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap12_env)
     if body != None:
         soap_body.append(body)
 
