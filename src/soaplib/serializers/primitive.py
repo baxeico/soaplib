@@ -158,6 +158,9 @@ class String(SimpleType):
 class AnyUri(String):
     __type_name__ = 'anyURI'
 
+class Token(String):
+    __type_name__ = 'token'
+
 class Integer(SimpleType):
     @classmethod
     @nillable_element
@@ -356,12 +359,6 @@ class Array(SimpleType):
             top_level_element.set('type', cls.get_type_name_ns())
 
             schema_entries.add_element(cls, top_level_element)
-
-class AnyUri(String):
-    __type_name__ = 'anyURI'
-
-class Token(String):
-    __type_name__ = 'token'
 
 # a class that is really a namespace
 class Mandatory(object):
