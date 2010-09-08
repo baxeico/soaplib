@@ -348,7 +348,7 @@ class Application(object):
         role.set('name', service_name)
 
         plink_port_type = etree.SubElement(role, '{%s}portType' % ns_plink)
-        plink_port_type.set('name', '%s:%s' % (pref_tns,service_name))
+        plink_port_type.set('name', '%s:%s' % (pref_tns, service_name))
 
         if self._has_callbacks():
             role = etree.SubElement(plink, '{%s}role' % ns_plink)
@@ -356,7 +356,7 @@ class Application(object):
 
             plink_port_type = etree.SubElement(role, '{%s}portType' % ns_plink)
             plink_port_type.set('name', '%s:%sCallback' %
-                                                       (pref_tns,service_name))
+                                                       (pref_tns, service_name))
 
     def _has_callbacks(self):
         retval = False
@@ -631,7 +631,10 @@ class ValidatingApplication(Application):
         schema_nodes = Application.build_schema(self, types)
 
         if types is None:
-            logger.debug("generating schema...")
+            pref_tns = soaplib.get_namespace_prefix(self.get_tns())
+            logger.debug("generating schema for targetNamespace=%r, prefix: %r"
+                                                   % (self.get_tns(), pref_tns))
+
             tmp_dir_name = tempfile.mkdtemp()
 
             # serialize nodes to files
@@ -642,7 +645,6 @@ class ValidatingApplication(Application):
                 f.close()
                 logger.debug("writing %r for ns %s" % (file_name, soaplib.nsmap[k]))
 
-            pref_tns = soaplib.get_namespace_prefix(self.get_tns())
             f = open('%s/%s.xsd' % (tmp_dir_name, pref_tns), 'r')
 
             logger.debug("building schema...")
@@ -658,6 +660,10 @@ class ValidatingApplication(Application):
     def validate_request(self, payload):
         schema = self.schema
         ret = schema.validate(payload)
+
         logger.debug("validation result: %s" % str(ret))
+
         if ret == False:
-            raise ValidationError(schema.error_log.last_error.message)
+            err = schema.error_log.last_error
+            raise ValidationError(u"Error %d: %s" % (err.type, err.type_name),
+                                                          err.message, str(err))
