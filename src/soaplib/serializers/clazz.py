@@ -147,9 +147,16 @@ class ClassSerializerBase(NonExtendingClass, Base):
                     raise KeyError(k)
 
         for k, v in cls._type_info.items():
+            def append_element(x):
+                subelement = v.to_xml(x, cls.get_namespace(), k)
+                element.append(subelement)
+
             subvalue = getattr(value, k, None)
-            subelement = v.to_xml(subvalue, cls.get_namespace(), k)
-            element.append(subelement)
+            if (isinstance(subvalue, list) or isinstance(subvalue, tuple)) and v.Attributes.max_occurs != 1:
+                for y in subvalue:
+                    append_element(y)
+            else:
+                append_element(subvalue)
 
         clz = getattr(cls,'__extends__', None)
         while not (clz is None):
@@ -180,7 +187,14 @@ class ClassSerializerBase(NonExtendingClass, Base):
                                                              (cls.__name__,key))
 
             value = member.from_xml(c)
-            setattr(inst, key, value)
+            if member.Attributes.max_occurs == 1:
+                setattr(inst, key, value)
+            else:
+                l = getattr(inst, key, None)
+                if not isinstance(l, list):
+                    l = []
+                l.append(value)
+                setattr(inst, key, l)
 
         return inst
 
