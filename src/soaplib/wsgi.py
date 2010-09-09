@@ -495,7 +495,7 @@ class Application(object):
             # FIXME: There's no way to alter soap response headers for the user.
 
             soap_resp_header = None
-            soap_resp_body = Fault.to_xml(e, self.get_tns())
+            soap_resp_body = e.__class__.to_xml(e, self.get_tns())
 
             fault_xml = make_soap_envelope(soap_resp_header, soap_resp_body)
             fault_str = etree.tostring(fault_xml, xml_declaration=True,
