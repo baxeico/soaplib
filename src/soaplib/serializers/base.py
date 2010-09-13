@@ -24,7 +24,8 @@ from lxml import etree
 def nillable_value(func):
     def wrapper(cls, value, tns, parent_elt, *args, **kwargs):
         if value is None:
-            Null.to_xml(value, tns, parent_elt, *args, **kwargs)
+            if cls.Attributes.nillable:
+                Null.to_xml(value, tns, parent_elt, *args, **kwargs)
         else:
             func(cls, value, tns, parent_elt, *args, **kwargs)
     return wrapper
