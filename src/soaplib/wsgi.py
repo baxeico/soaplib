@@ -528,7 +528,7 @@ class Application(object):
         self.on_exception_object(req_env, exc)
 
         # FIXME: There's no way to alter soap response headers for the user.
-        envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap12_env)
+        envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap12_env, nsmap=soaplib.nsmap)
         body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap12_env)
         exc.__class__.to_xml(exc, self.get_tns(), body)
 
