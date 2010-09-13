@@ -428,14 +428,14 @@ class Application(object):
             result_raw = service.call_wrapper(func, params)
 
             # construct the soap response, and serialize it
-            envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap_env,
+            envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap12_env,
                                                             nsmap=soaplib.nsmap)
 
             #
             # header
             #
             soap_header_elt = etree.SubElement(envelope,
-                                             '{%s}Header' % soaplib.ns_soap_env)
+                                             '{%s}Header' % soaplib.ns_soap12_env)
 
             if service.soap_out_header != None:
                 if descriptor.out_header is None:
@@ -456,7 +456,7 @@ class Application(object):
             #
             # body
             #
-            soap_body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap_env)
+            soap_body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap12_env)
 
             # instantiate the result message
             result_message = descriptor.out_message()
@@ -530,8 +530,8 @@ class Application(object):
         self.on_exception_object(req_env, exc)
 
         # FIXME: There's no way to alter soap response headers for the user.
-        envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap_env)
-        body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap_env)
+        envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap12_env)
+        body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap12_env)
         exc.__class__.to_xml(exc, self.get_tns(), body)
 
         if not (service is None):

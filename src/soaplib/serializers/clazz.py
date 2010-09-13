@@ -124,7 +124,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
             name = cls.get_type_name()
 
         element = etree.SubElement(parent_elt,
-                                         "{%s}%s" % (cls.get_namespace(), name))
+                                         "{%s}%s" % (tns, name))
 
         # if the instance is a list, convert it to a cls instance.
         # this is only useful when deserializing descriptor.in_message as it's
