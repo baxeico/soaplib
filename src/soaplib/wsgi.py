@@ -292,7 +292,6 @@ class Application(object):
         # ('text/xml', {'charset': 'utf-8'})
         content_type = cgi.parse_header(http_env.get("CONTENT_TYPE"))
         charset = content_type[1].get('charset',None)
-
         if charset is None:
             charset = 'ascii'
 
@@ -384,8 +383,7 @@ class Application(object):
                                                                 req_env, body)
                 self.validate_request(soap_req_payload)
 
-                method_name = self.__get_method_name(req_env, soap_req_payload)
-                
+                method_name = self.__get_method_name(req_env, soap_req_payload)                
                 if method_name is None:
                     resp = "Could not get method name!"
                     http_resp_headers['Content-Length'] = str(len(resp))

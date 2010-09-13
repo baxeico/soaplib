@@ -77,7 +77,7 @@ def rpc(*params, **kparams):
                     _out_message = kparams.get('_out_message', '%sResponse' %
                                                                     f.func_name)
 
-                    #kparams.get('_out_variable_name')
+                    kparams.get('_out_variable_name')
                     out_params = TypeInfo()
 
                     if _returns:

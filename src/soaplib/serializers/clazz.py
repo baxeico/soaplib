@@ -153,7 +153,6 @@ class ClassSerializerBase(NonExtendingClass, Base):
             parent_cls.to_xml(value, tns, parent_elt, name)
 
         for k, v in cls._type_info.items():
-
             mo=v.Attributes.max_occurs
             subvalue = getattr(value, k, None)
 

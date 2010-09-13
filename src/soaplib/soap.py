@@ -79,8 +79,6 @@ def from_soap(xml_string, http_charset):
         logger.debug('%s -- falling back to str decoding.' % (e))
         root, xmlids = etree.XMLID(xml_string)
 
-    logger.debug("root: " + etree.tostring(root, pretty_print=True))
-
     if xmlids:
         resolve_hrefs(root, xmlids)
 
