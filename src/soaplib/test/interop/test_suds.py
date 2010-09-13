@@ -28,6 +28,12 @@ class TestSuds(unittest.TestCase):
         self.client = Client("http://localhost:9753/?wsdl", cache=None)
         self.ns = "soaplib.test.interop.server._service"
 
+    def test_echo_simple_boolean_array(self):
+        val = [True, False, False, True]
+        ret = self.client.service.echo_simple_boolean_array(val)
+
+        assert val == ret
+
     def test_enum(self):
         DaysOfWeekEnum = self.client.factory.create("DaysOfWeekEnum")
 
@@ -91,13 +97,13 @@ class TestSuds(unittest.TestCase):
                 "test_subsub2": ["subsub2 value 1", "subsub2 value 2"],
                 "test_subsub3": [
                     {
-                        "test_subsub3sub1": "subsub3sub1 value"
+                        "test_subsub3sub1": ["subsub3sub1 value"]
                     },
                     {
-                        "test_subsub3sub2": "subsub3sub2 value"
+                        "test_subsub3sub2": ["subsub3sub2 value"]
                     },
                 ],
-                "test_subsub4": None,
+                "test_subsub4": [],
                 "test_subsub5": ["x"],
             }
         }
@@ -190,9 +196,5 @@ class TestSuds(unittest.TestCase):
         raise Exception("test something! :)")
         # TODO: write asserts
 
-def suite():
-    loader = unittest.TestLoader()
-    return loader.loadTestsFromTestCase(TestSuds)
-
-if __name__== '__main__':
-    unittest.TextTestRunner().run(suite())
+if __name__ == '__main__':
+    unittest.main()

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 #
 # soaplib - Copyright (C) Soaplib contributors.
@@ -118,14 +119,18 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
     @classmethod
     @nillable_value
-    def to_xml(cls, value, tns, name=None, element=None):
+    def to_xml(cls, value, tns, parent_elt, name=None):
         if name is None:
             name = cls.get_type_name()
 
-        if element is None:
-            # element = etree.Element("{%s}%s" % (cls.get_namespace(), name))
-            element = etree.Element("{%s}%s" % (tns, name))
+        element = etree.SubElement(parent_elt,
+                                         "{%s}%s" % (cls.get_namespace(), name))
 
+        # if the instance is a list, convert it to a cls instance.
+        # this is only useful when deserializing descriptor.in_message as it's
+        # the only time when the member order is not arbitrary (as the members
+        # are declared as sequences of arguments in function definitions, unlike
+        # dictionaries in a regular class definition).
         if isinstance(value, list) or isinstance(value, tuple):
             assert len(value) <= len(cls._type_info)
 
@@ -140,40 +145,33 @@ class ClassSerializerBase(NonExtendingClass, Base):
             map = value
             value = cls()
 
-            for k,v in map.items():
-                if k in cls._type_info:
-                    setattr(value, k, v)
-                else:
-                    raise KeyError(k)
+            for k in cls._type_info:
+                setattr(value, k, map.get(k,None))
+
+        parent_cls = getattr(cls, '__extends__', None)
+        if not (parent_cls is None):
+            parent_cls.to_xml(value, tns, parent_elt, name)
 
         for k, v in cls._type_info.items():
-            def append_element(x):
-                subelement = v.to_xml(x, cls.get_namespace(), k)
-                element.append(subelement)
 
+            mo=v.Attributes.max_occurs
             subvalue = getattr(value, k, None)
-            if (isinstance(subvalue, list) or isinstance(subvalue, tuple)) and v.Attributes.max_occurs != 1:
-                for y in subvalue:
-                    append_element(y)
+
+            if mo == 'unbounded' or mo > 1:
+                for sv in subvalue:
+                    v.to_xml(sv, cls.get_namespace(), element, k)
             else:
-                append_element(subvalue)
-
-        clz = getattr(cls,'__extends__', None)
-        while not (clz is None):
-            clz.to_xml(value, tns, name, element)
-            clz = getattr(clz,'__extends__', None)
-
-        return element
+                v.to_xml(subvalue, cls.get_namespace(), element, k)
 
     @classmethod
     @nillable_element
     def from_xml(cls, element):
         inst = cls()
-        children = element.getchildren()
 
-        for c in children:
+        for c in element:
             if isinstance(c, etree._Comment):
                 continue
+
             key = c.tag.split('}')[-1]
 
             member = cls._type_info.get(key, None)
@@ -186,15 +184,17 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 raise Exception('the %s object does not have a "%s" member' %
                                                              (cls.__name__,key))
 
-            value = member.from_xml(c)
-            if member.Attributes.max_occurs == 1:
+            mo = member.Attributes.max_occurs
+            if mo == 'unbounded' or mo > 1:
+                value=getattr(inst,key,[])
+                if value is None:
+                    value = []
+
+                value.append(member.from_xml(c))
                 setattr(inst, key, value)
+
             else:
-                l = getattr(inst, key, None)
-                if not isinstance(l, list):
-                    l = []
-                l.append(value)
-                setattr(inst, key, l)
+                setattr(inst, key, member.from_xml(c))
 
         return inst
 
@@ -248,13 +248,13 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 member = etree.SubElement(sequence, '{%s}element' %
                                                                 soaplib.ns_xsd)
                 member.set('name', k)
+                member.set('type', v.get_type_name_ns())
 
-                if v.Attributes.min_occurs != 1: # 1 is the default
+                if v.Attributes.min_occurs != 1: # 1 is the xml schema default
                     member.set('minOccurs', str(v.Attributes.min_occurs))
-                if v.Attributes.max_occurs != 1: # 1 is the default
+                if v.Attributes.max_occurs != 1: # 1 is the xml schema default
                     member.set('maxOccurs', str(v.Attributes.max_occurs))
 
-                member.set('type', v.get_type_name_ns())
                 if bool(v.Attributes.nillable) == True:
                     member.set('nillable', 'true')
                 else:

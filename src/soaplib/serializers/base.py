@@ -22,29 +22,29 @@ import soaplib
 from lxml import etree
 
 def nillable_value(func):
-    def wrapper(cls, value, tns, *args, **kwargs):
+    def wrapper(cls, value, tns, parent_elt, *args, **kwargs):
         if value is None:
-            return Null.to_xml(value, tns, *args, **kwargs)
-        return func(cls, value, tns, *args, **kwargs)
+            Null.to_xml(value, tns, parent_elt, *args, **kwargs)
+        else:
+            func(cls, value, tns, parent_elt, *args, **kwargs)
     return wrapper
 
 def nillable_element(func):
     def wrapper(cls, element):
         if bool(element.get('{%s}nil' % soaplib.ns_xsi)): # or (element.text is None and len(element.getchildren()) == 0):
             return None
-        return func(cls, element)
+        else:
+            return func(cls, element)
     return wrapper
 
-def string_to_xml(cls, value, tns, name):
+def string_to_xml(cls, value, tns, parent_elt, name):
     assert isinstance(value, str) or isinstance(value, unicode), "'value' must " \
                     "be string or unicode. it is instead '%s'" % repr(value)
 
-    retval = etree.Element("{%s}%s" % (tns,name))
+    element = etree.SubElement(parent_elt, "{%s}%s" % (tns,name))
 
-    retval.set('{%s}type' % soaplib.ns_xsi, cls.get_type_name_ns())
-    retval.text = value
-
-    return retval
+    element.set('{%s}type' % soaplib.ns_xsi, cls.get_type_name_ns())
+    element.text = value
 
 class Base(object):
     __namespace__ = None
@@ -60,9 +60,7 @@ class Base(object):
 
     @classmethod
     def is_default(cls):
-        return (cls.Attributes.nillable == Base.Attributes.nillable
-            and cls.Attributes.min_occurs == Base.Attributes.min_occurs
-            and cls.Attributes.max_occurs == Base.Attributes.max_occurs)
+        return True 
 
     @classmethod
     def get_namespace_prefix(cls):
@@ -102,21 +100,22 @@ class Base(object):
             return "%s:%s" % (cls.get_namespace_prefix(), cls.get_type_name())
 
     @classmethod
-    def to_xml(cls, value, tns, name='retval'):
-        return string_to_xml(cls, value, tns, name)
+    def to_xml(cls, value, tns, parent_elt, name='retval'):
+        string_to_xml(cls, value, tns, parent_elt, name)
 
     @classmethod
     def add_to_schema(cls, schema_entries):
         '''
-        Nothing needs to happen when the type is a standard schema element
+        Add this type to the wsdl.
         '''
-        pass
+        #Nothing needs to happen when the type is a standard schema element
 
     @classmethod
     def customize(cls, **kwargs):
         """
         This function duplicates and customizes the class it belongs to. The
-        original class remains unchanged.
+        original class remains unchanged. This is an ugly hack. If you know
+        better, let us know.
         """
 
         cls_dict = {}
@@ -139,11 +138,9 @@ class Base(object):
 
 class Null(Base):
     @classmethod
-    def to_xml(cls, value, tns, name='retval'):
-        element = etree.Element("{%s}%s" % (tns,name))
+    def to_xml(cls, value, tns, parent_elt, name='retval'):
+        element = etree.SubElement(parent_elt, "{%s}%s" % (tns,name))
         element.set('{%s}nil' % soaplib.ns_xsi, 'true')
-
-        return element
 
     @classmethod
     def from_xml(cls, element):
@@ -182,8 +179,7 @@ class SimpleType(Base):
 
     @classmethod
     def is_default(cls):
-        return (Base.is_default()
-            and cls.Attributes.values == SimpleType.Attributes.values)
+        return (cls.Attributes.values == SimpleType.Attributes.values)
 
     @classmethod
     def get_restriction_tag(cls, schema_entries):
