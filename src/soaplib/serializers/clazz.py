@@ -124,15 +124,6 @@ class ClassSerializerBase(NonExtendingClass, Base):
             return attr
 
     @classmethod
-    @nillable_value
-    def to_xml(cls, value, tns, parent_elt, name=None):
-        if name is None:
-            name = cls.get_type_name()
-
-        element = etree.SubElement(parent_elt,
-                                         "{%s}%s" % (tns, name))
-
-    @classmethod
     def get_serialization_instance(cls, value):
         # if the instance is a list, convert it to a cls instance.
         # this is only useful when deserializing descriptor.in_message as it's
@@ -170,7 +161,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
             name = cls.get_type_name()
 
         element = etree.SubElement(parent_elt,
-                                         "{%s}%s" % (cls.get_namespace(), name))
+                                         "{%s}%s" % (tns, name))
 
         inst = cls.get_serialization_instance(value)
 
