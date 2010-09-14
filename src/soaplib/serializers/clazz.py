@@ -118,9 +118,9 @@ class ClassSerializerBase(NonExtendingClass, Base):
     @classmethod
     def __getAttrInfo(cls):
         attr = getattr(cls, "_attr_info", [])
-        if isinstance(attr, dict):
+        try:
             return attr.items()
-        else:
+        except AttributeError:
             return attr
 
     @classmethod
