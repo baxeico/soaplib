@@ -210,6 +210,11 @@ class _SchemaEntries(object):
                 if is_valid_import(pref):
                     self.imports[pref_tns].add(soaplib.nsmap[pref])
 
+            elif seq.tag == '{%s}attribute' % soaplib.ns_xsd:
+                pref = seq.attrib['type'].split(':')[0]
+                if is_valid_import(pref):
+                    self.imports[pref_tns].add(soaplib.nsmap[pref])
+
             else:
                 raise Exception("i guess you need to hack some more")
 

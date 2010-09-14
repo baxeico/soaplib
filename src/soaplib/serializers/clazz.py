@@ -118,6 +118,14 @@ class ClassSerializerBase(NonExtendingClass, Base):
         return getattr(self, self._type_info.keys()[i], None)
 
     @classmethod
+    def __getAttrInfo(cls):
+        attr = getattr(cls, "_attr_info", [])
+        if isinstance(attr, dict):
+            return attr.items()
+        else:
+            return attr
+
+    @classmethod
     @nillable_value
     def to_xml(cls, value, tns, parent_elt, name=None):
         if name is None:
@@ -162,6 +170,21 @@ class ClassSerializerBase(NonExtendingClass, Base):
             else:
                 v.to_xml(subvalue, cls.get_namespace(), element, k)
 
+        instAttr = getattr(value, "_attributes", {})
+        for k, v in cls.__getAttrInfo():
+            required = getattr(v.Attributes, "required", False)
+            try:
+                attr = instAttr[k]
+            except KeyError:
+                if required:
+                    raise AttributeError("attribute %s is required" % k)
+            else:
+                temp = etree.Element("{temp}Temp")
+                v.to_xml(attr, "temp", temp)
+                if temp.getchildren():
+                    attrStr = temp.getchildren()[0].text
+                element.set(k, attrStr or "")
+
     @classmethod
     @nillable_element
     def from_xml(cls, element):
@@ -194,6 +217,20 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
             else:
                 setattr(inst, key, member.from_xml(c))
+
+            attributes = {}
+            for k, v in cls.__getAttrInfo():
+                required = getattr(v.Attributes, "required", False)
+                try:
+                    attr = element.attrib[k]
+                except KeyError:
+                    if required:
+                        raise AttributeError("attribute %s is required" % k)
+                else:
+                    temp = etree.Element("{temp}Temp")
+                    temp.text = attr
+                    attributes[k] = v.from_xml(temp)
+            inst._attributes = attributes
 
         return inst
 
@@ -258,6 +295,14 @@ class ClassSerializerBase(NonExtendingClass, Base):
                     member.set('nillable', 'true')
                 else:
                     member.set('nillable', 'false')
+
+            for k, v in cls.__getAttrInfo():
+                required = getattr(v.Attributes, "required", False)
+                attrnode = etree.SubElement(complex_type, '{%s}attribute' % soaplib.ns_xsd)
+                attrnode.set("name", k)
+                attrnode.set("type", v.get_type_name_ns())
+                if required:
+                    attrnode.set("use", "required")
 
             schema_entries.add_complex_type(cls, complex_type)
 
