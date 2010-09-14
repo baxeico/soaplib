@@ -59,9 +59,9 @@ class Base(object):
     class Empty(object):
         pass
 
-    @classmethod
+    @staticmethod
     def is_default(cls):
-        return True 
+        return True
 
     @classmethod
     def get_namespace_prefix(cls):
@@ -75,17 +75,13 @@ class Base(object):
     def get_namespace(cls):
         return cls.__namespace__
 
-    @classmethod
+    @staticmethod
     def resolve_namespace(cls, default_ns):
-        if cls.__namespace__ in soaplib.const_prefmap and not cls.is_default():
-            cls.__namespace__ = None
+        if cls.__namespace__ in soaplib.const_prefmap and not cls.is_default(cls):
+            cls.__namespace__ = default_ns
 
         if cls.__namespace__ is None:
             cls.__namespace__ = cls.__module__
-
-            if (cls.__namespace__.startswith("soaplib")
-                                            or cls.__namespace__ == '__main__'):
-                cls.__namespace__ = default_ns
 
     @classmethod
     def get_type_name(cls):
@@ -122,7 +118,7 @@ class Base(object):
         cls_dict = {}
 
         for k in cls.__dict__:
-            if not (k in ("__dict__", "__module__", "__weakref__")):
+            if not (k in ("__dict__", "__weakref__")):
                 cls_dict[k] = cls.__dict__[k]
 
         class Attributes(cls.Attributes):
@@ -130,11 +126,13 @@ class Base(object):
 
         cls_dict['Attributes'] = Attributes
 
+        if not ('_is_clone_of' in cls_dict):
+            cls_dict['_is_clone_of'] = cls
+
         for k,v in kwargs.items():
             setattr(Attributes,k,v)
 
         cls_dup = type(cls.__name__, cls.__bases__, cls_dict)
-
         return cls_dup
 
 class Null(Base):
@@ -164,21 +162,14 @@ class SimpleType(Base):
 
         retval = cls.customize(**kwargs)
 
-        if not retval.is_default():
-            if retval.get_namespace() is None:
-                retval.__base_type__ = cls.__base_type__
-            else:
-                retval.__base_type__ = cls.get_type_name_ns()
-
-            if retval.get_namespace() in soaplib.const_prefmap:
-                retval.__namespace__ = None
-
+        if not retval.is_default(retval):
+            retval.__base_type__ = cls
             if retval.__type_name__ is None:
                 retval.__type_name__ = kwargs.get("type_name", Base.Empty)
 
         return retval
 
-    @classmethod
+    @staticmethod
     def is_default(cls):
         return (cls.Attributes.values == SimpleType.Attributes.values)
 
@@ -190,7 +181,7 @@ class SimpleType(Base):
 
         restriction = etree.SubElement(simple_type,
                                             '{%s}restriction' % soaplib.ns_xsd)
-        restriction.set('base', cls.__base_type__)
+        restriction.set('base', cls.__base_type__.get_type_name_ns())
 
         for v in cls.Attributes.values:
             enumeration = etree.SubElement(restriction,
@@ -201,5 +192,5 @@ class SimpleType(Base):
 
     @classmethod
     def add_to_schema(cls, schema_entries):
-        if not schema_entries.has_class(cls) and not cls.is_default():
+        if not schema_entries.has_class(cls) and not cls.is_default(cls):
             cls.get_restriction_tag(schema_entries)
