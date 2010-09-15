@@ -56,7 +56,8 @@ class ClassSerializerMeta(type):
                                 "WSDL 1.1 does not support multiple inheritance"
 
                     try:
-                        if len(base_types) > 0 and issubclass(b, Base):
+                        # if len(base_types) > 0 and issubclass(b, Base):
+                        if issubclass(b, Base):
                             cls_dict["__extends__"] = extends = b
                     except:
                         print extends
@@ -84,6 +85,8 @@ class ClassSerializerMeta(type):
             _type_info = cls_dict['_type_info']
             if not isinstance(_type_info, TypeInfo):
                 cls_dict['_type_info'] = TypeInfo(_type_info)
+
+        cls_dict['_attr_info'] = TypeInfo(cls_dict.get('_attr_info', []))
 
         return type.__new__(cls, cls_name, cls_bases, cls_dict)
 
@@ -114,14 +117,6 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
     def __getitem__(self,i):
         return getattr(self, self._type_info.keys()[i], None)
-
-    @classmethod
-    def __getAttrInfo(cls):
-        attr = getattr(cls, "_attr_info", [])
-        try:
-            return attr.items()
-        except AttributeError:
-            return attr
 
     @classmethod
     def get_serialization_instance(cls, value):
@@ -190,7 +185,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 v.to_xml(subvalue, cls.get_namespace(), element, k)
 
         instAttr = getattr(value, "_attributes", {})
-        for k, v in cls.__getAttrInfo():
+        for k, v in cls._attr_info.items():
             required = getattr(v.Attributes, "required", False)
             try:
                 attr = instAttr[k]
@@ -240,7 +235,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
             attributes = {}
             current_cls = cls
             while not current_cls is None:
-                for k, v in current_cls.__getAttrInfo():
+                for k, v in current_cls._attr_info.items():
                     required = getattr(v.Attributes, "required", False)
                     try:
                         attr = element.attrib[k]
@@ -314,7 +309,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 if bool(v.Attributes.nillable) == True: # it's false by default.
                     member.set('nillable', 'true')
 
-            for k, v in cls.__getAttrInfo():
+            for k, v in cls._attr_info.items():
                 required = getattr(v.Attributes, "required", False)
                 attrnode = etree.SubElement(sequence_parent, '{%s}attribute' % soaplib.ns_xsd)
                 attrnode.set("name", k)
