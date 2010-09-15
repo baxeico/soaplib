@@ -305,7 +305,7 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
             for k, v in cls.__getAttrInfo():
                 required = getattr(v.Attributes, "required", False)
-                attrnode = etree.SubElement(complex_type, '{%s}attribute' % soaplib.ns_xsd)
+                attrnode = etree.SubElement(sequence_parent, '{%s}attribute' % soaplib.ns_xsd)
                 attrnode.set("name", k)
                 attrnode.set("type", v.get_type_name_ns())
                 if required:
