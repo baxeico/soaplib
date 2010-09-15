@@ -167,7 +167,15 @@ class ClassSerializerBase(NonExtendingClass, Base):
 
         parent_cls = getattr(cls, '__extends__', None)
         if not (parent_cls is None):
-            parent_cls.to_xml(inst, tns, parent_elt, name)
+            temp = etree.Element("{temp}Temp")
+            parent_cls.to_xml(inst, tns, temp, name)
+            if len(temp):
+                assert len(temp) == 1
+                for c in temp[0]:
+                    element.append(c)
+                for a, v in temp[0].attrib.items():
+                    element.set(a, v)
+                element.text = temp[0].text
 
         for k, v in cls._type_info.items():
             mo = v.Attributes.max_occurs
@@ -230,17 +238,20 @@ class ClassSerializerBase(NonExtendingClass, Base):
                 setattr(inst, key, member.from_xml(c))
 
             attributes = {}
-            for k, v in cls.__getAttrInfo():
-                required = getattr(v.Attributes, "required", False)
-                try:
-                    attr = element.attrib[k]
-                except KeyError:
-                    if required:
-                        raise AttributeError("attribute %s is required" % k)
-                else:
-                    temp = etree.Element("{temp}Temp")
-                    temp.text = attr
-                    attributes[k] = v.from_xml(temp)
+            current_cls = cls
+            while not current_cls is None:
+                for k, v in current_cls.__getAttrInfo():
+                    required = getattr(v.Attributes, "required", False)
+                    try:
+                        attr = element.attrib[k]
+                    except KeyError:
+                        if required:
+                            raise AttributeError("attribute %s is required" % k)
+                    else:
+                        temp = etree.Element("{temp}Temp")
+                        temp.text = attr
+                        attributes[k] = v.from_xml(temp)
+                current_cls = getattr(current_cls, '__extends__', None)
             inst._attributes = attributes
 
         return inst
