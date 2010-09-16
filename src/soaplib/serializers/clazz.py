@@ -242,6 +242,8 @@ class ClassSerializerBase(NonExtendingClass, Base):
                     except KeyError:
                         if required:
                             raise AttributeError("attribute %s is required" % k)
+                        else:
+                            attributes[k] = None
                     else:
                         temp = etree.Element("{temp}Temp")
                         temp.text = attr
