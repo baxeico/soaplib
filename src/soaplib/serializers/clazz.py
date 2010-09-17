@@ -56,8 +56,7 @@ class ClassSerializerMeta(type):
                                 "WSDL 1.1 does not support multiple inheritance"
 
                     try:
-                        # if len(base_types) > 0 and issubclass(b, Base):
-                        if issubclass(b, Base):
+                        if (len(base_types) > 0 or len(getattr(b, "_attr_info", {}))) and issubclass(b, Base):
                             cls_dict["__extends__"] = extends = b
                     except:
                         print extends
