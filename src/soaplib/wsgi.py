@@ -463,10 +463,14 @@ class Application(object):
             out_type = descriptor.out_message._type_info
 
             if len(out_type) > 0:
-                assert len(out_type) == len(result_raw)
+                if len(out_type) == 1:
+                    attr_name = descriptor.out_message._type_info.keys()[0]
+                    setattr(result_message, attr_name, result_raw)
+                else:
+                    assert len(out_type) == len(result_raw)
 
-                for attr_name, result_r in zip(out_type, result_raw):
-                    setattr(result_message, attr_name, result_r)
+                    for attr_name, result_r in zip(out_type, result_raw):
+                        setattr(result_message, attr_name, result_r)
 
             # transform the results into an element
             if not (descriptor.is_async or descriptor.is_callback):
