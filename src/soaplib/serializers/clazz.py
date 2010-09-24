@@ -231,24 +231,24 @@ class ClassSerializerBase(NonExtendingClass, Base):
             else:
                 setattr(inst, key, member.from_xml(c))
 
-            attributes = {}
-            current_cls = cls
-            while not current_cls is None:
-                for k, v in current_cls._attr_info.items():
-                    required = getattr(v.Attributes, "required", False)
-                    try:
-                        attr = element.attrib[k]
-                    except KeyError:
-                        if required:
-                            raise AttributeError("attribute %s is required" % k)
-                        else:
-                            attributes[k] = None
+        attributes = {}
+        current_cls = cls
+        while not current_cls is None:
+            for k, v in current_cls._attr_info.items():
+                required = getattr(v.Attributes, "required", False)
+                try:
+                    attr = element.attrib[k]
+                except KeyError:
+                    if required:
+                        raise AttributeError("attribute %s is required" % k)
                     else:
-                        temp = etree.Element("{temp}Temp")
-                        temp.text = attr
-                        attributes[k] = v.from_xml(temp)
-                current_cls = getattr(current_cls, '__extends__', None)
-            inst._attributes = attributes
+                        attributes[k] = None
+                else:
+                    temp = etree.Element("{temp}Temp")
+                    temp.text = attr
+                    attributes[k] = v.from_xml(temp)
+            current_cls = getattr(current_cls, '__extends__', None)
+        inst._attributes = attributes
 
         return inst
 
