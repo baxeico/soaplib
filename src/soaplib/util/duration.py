@@ -102,6 +102,6 @@ class duration(object):
             parse_seq(str1, cls.__seq1)
             parse_seq(str2, cls.__seq2)
         except:
-            raise ValueError("Duration [%s] not in correct format" % orig_str)
+            raise ValueError("Duration '%s' not in correct format" % orig_str)
 
         return ret
