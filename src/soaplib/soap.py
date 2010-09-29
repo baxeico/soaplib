@@ -56,7 +56,7 @@ class MethodDescriptor(object):
 
     def __init__(self, name, public_name, in_message, out_message, doc,
                  is_callback=False, is_async=False, mtom=False, in_header=None,
-                 out_header=None):
+                 out_header=None, default_faultcode=None):
 
         self.name = name
         self.public_name = public_name
@@ -68,6 +68,7 @@ class MethodDescriptor(object):
         self.mtom = mtom
         self.in_header = in_header
         self.out_header = out_header
+        self.default_faultcode = default_faultcode
 
 def from_soap(xml_string, http_charset):
     '''

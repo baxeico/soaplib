@@ -112,6 +112,7 @@ def rpc(*params, **kparams):
                 _mtom = kparams.get('_mtom', False)
                 _in_header = kparams.get('_in_header', None)
                 _out_header = kparams.get('_out_header', None)
+                _default_faultcode = kparams.get('_default_faultcode', None)
 
                 # the decorator function does not have a reference to the
                 # class and needs to be passed in
@@ -128,7 +129,7 @@ def rpc(*params, **kparams):
                 doc = getattr(f, '__doc__')
                 descriptor = MethodDescriptor(f.func_name, _public_name,
                         in_message, out_message, doc, _is_callback, _is_async,
-                        _mtom, _in_header, _out_header)
+                        _mtom, _in_header, _out_header, _default_faultcode)
 
                 return descriptor
 

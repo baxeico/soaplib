@@ -31,6 +31,7 @@ ns_soap12_env = 'http://www.w3.org/2003/05/soap-envelope'
 ns_soap12_enc = 'http://www.w3.org/2003/05/soap-encoding'
 ns_wsa = 'http://schemas.xmlsoap.org/ws/2003/03/addressing'
 ns_xop = 'http://www.w3.org/2004/08/xop/include'
+ns_xml = 'http://www.w3.org/XML/1998/namespace'
 
 nsmap = {
     'xs': ns_xsd,
@@ -44,6 +45,7 @@ nsmap = {
     's12enc': ns_soap12_enc,
     'wsa': ns_wsa,
     'xop': ns_xop,
+    'xml': ns_xml,
 }
 
 # prefix map

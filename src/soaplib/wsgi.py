@@ -46,7 +46,7 @@ class ValidationError(Fault):
     pass
 
 class Application(object):
-    def __init__(self, services, tns, _with_partnerlink=False):
+    def __init__(self, services, tns, _with_partnerlink=False, _unknown_method_faultcode = None):
         '''
         @param A ServiceBase subclass that defines the exposed services.
         '''
@@ -59,6 +59,7 @@ class Application(object):
         self.schema = None
         self.tns = tns
         self._with_plink = _with_partnerlink
+        self._unknown_method_faultcode = _unknown_method_faultcode
 
         self.build_schema()
 
@@ -363,6 +364,9 @@ class Application(object):
             'Content-Length': '0',
         }
         method_name = None
+        fault_code = None
+        descriptor = None
+        service_class = None
 
         try:
             # implementation hook
@@ -390,7 +394,12 @@ class Application(object):
                     start_response(HTTP_500, http_resp_headers.items())
                     return [resp]
 
-                service_class = self.get_service_class(method_name)
+                try:
+                    service_class = self.get_service_class(method_name)
+                except KeyError:
+                    logger.debug("method '%s' not found" % method_name)
+                    fault_code = self._unknown_method_faultcode
+                    raise
                 service = self.get_service(service_class, req_env)
 
             finally:
@@ -512,7 +521,13 @@ class Application(object):
                                                 http_resp_headers, service, e)
 
         except Exception, e:
-            if method_name:
+            if fault_code:
+                pass
+            elif descriptor and descriptor.default_faultcode:
+                fault_code = descriptor.default_faultcode
+            elif service_class and hasattr(service_class, "_default_faultcode"):
+                fault_code = service_class._default_faultcode
+            elif method_name:
                 fault_code = '%sFault' % method_name
             else:
                 fault_code = 'Server'
@@ -534,7 +549,7 @@ class Application(object):
         # FIXME: There's no way to alter soap response headers for the user.
         envelope = etree.Element('{%s}Envelope' % soaplib.ns_soap12_env, nsmap=soaplib.nsmap)
         body = etree.SubElement(envelope, '{%s}Body' % soaplib.ns_soap12_env)
-        exc.__class__.to_xml(exc, self.get_tns(), body)
+        exc.__class__.to_xml(exc, soaplib.ns_soap12_env, body)
 
         if not (service is None):
             service.on_method_exception_xml(req_env, body)
