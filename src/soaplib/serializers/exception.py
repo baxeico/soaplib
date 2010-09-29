@@ -167,7 +167,7 @@ class _Soap12Fault(Exception, Base):
 
         faultcode = []
         codeEl = element.find("{%s}Code" % ns_env)
-        while codeEl:
+        while not codeEl is None:
             valueEl = codeEl.find("{%s}Value" % ns_env)
             if not valueEl is None:
                 faultcode.append(cls.__to_namespace(valueEl.text or "", element.nsmap))
@@ -175,16 +175,16 @@ class _Soap12Fault(Exception, Base):
 
         faultstring = ""
         reasonEl = element.find("{%s}Reason" % ns_env)
-        if reasonEl:
+        if not reasonEl is None:
             reasontextEl = reasonEl.find("{%s}Text" % ns_env)
-            if reasontextEl:
+            if not reasontextEl is None:
                 faultstring = reasontextEl.text or ""
 
         detail = ""
         detailEl = element.find("{%s}Detail" % ns_env)
-        if detailEl:
+        if not detailEl is None:
             detailtextEl = detailEl.find("{%s}Text" % ns_env)
-            if detailtextEl:
+            if not detailtextEl is None:
                 detail = detailtextEl.text or ""
         
         return cls(faultcode, faultstring, detail)
