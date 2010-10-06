@@ -44,7 +44,7 @@ def string_to_xml(cls, value, tns, parent_elt, name):
 
     element = etree.SubElement(parent_elt, "{%s}%s" % (tns,name))
 
-    element.set('{%s}type' % soaplib.ns_xsi, cls.get_type_name_ns())
+    # element.set('{%s}type' % soaplib.ns_xsi, cls.get_type_name_ns())
     element.text = value
 
 class Base(object):
