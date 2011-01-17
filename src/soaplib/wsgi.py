@@ -417,10 +417,11 @@ class Application(object):
             descriptor = service.get_method(method_name)
             func = getattr(service, descriptor.name)
 
+     #      gestione dell'header della richiesta !!! -> autenticazione
             # decode header object
-            if soap_req_header is not None and len(soap_req_header) > 0:
-                in_header = descriptor.in_header
-                service.soap_in_header = in_header.from_xml(soap_req_header)
+     #       if soap_req_header is not None and len(soap_req_header) > 0:
+     #           in_header = descriptor.in_header
+     #           service.soap_in_header = in_header.from_xml(soap_req_header)
 
             # decode method arguments
             if soap_req_payload is not None and len(soap_req_payload) > 0:
